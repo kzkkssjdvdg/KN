@@ -1061,3 +1061,22 @@ FITUR: visibilitas PO Terlambat (display-only, derived dari expected_delivery_da
 Screenshot end-to-end sebagai admin/KSC: PO-00004 (receiving, janji 2026-08-28)
 → badge daftar "Telat 2 hari" + panel + detail konsisten; PO belum jatuh tempo
 (KSC/PO-00011 dst) tanpa badge. eslint 0 error, build FE OK.
+
+## 2026-08-30 — Sirine Alarm Gate MERAH (backlog P1)
+FITUR: `utils/sirenAlarm.js` — sirine dua-nada via Web Audio API (tanpa berkas
+suara), mute tersimpan di localStorage `kn_siren_muted`.
+1. Gate Monitor (`RfidGateMonitorView`): baca MERAH BARU (simulasi maupun Mode
+   Live 4 dtk) membunyikan sirine; baseline menunggu muatan pertama supaya baca
+   MERAH HISTORIS tidak meraung saat layar dibuka (cacat ini ditemukan & ditutup
+   saat uji layar sendiri); baseline di-reset saat ganti gudang. Tombol
+   `rfid-siren-toggle` (Sirine ON/OFF) di header.
+2. Lonceng notifikasi (`useAppActions.loadNotifications` → `sirenOnNewAlarms`):
+   notifikasi `rfid_gate_alarm` BARU yang belum dibaca membunyikan sirine di
+   layar mana pun; baseline pada muatan pertama (reload halaman dengan alarm
+   lama tidak berbunyi). Toggle `notif-siren-toggle` di panel lonceng +
+   TYPE_LABEL "Alarm gate MERAH" untuk filter jenis.
+### Verifikasi
+Instrumentasi `OscillatorNode.start` di browser: buka layar = 0 bunyi; simulasi
+roll AVAILABLE keluar gate → MERAH — DITAHAN + 1 bunyi; toggle ON memberi umpan
+balik 1 siklus. eslint 0 error, build FE OK. Residu simulasi dipulihkan via
+seed_realistic.py + seed_e9_chain_demo.py.

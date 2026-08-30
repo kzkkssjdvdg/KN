@@ -4,6 +4,7 @@ import { defaultViewForRole, defaultNavIdForRole } from "../config/navigationCon
 import { can } from "../config/roles";
 import { formatQty } from "../utils/formatters";
 import { blocksOrder, isOrderable, notOrderableReason } from "../utils/lifecycle";
+import { sirenOnNewAlarms } from "../utils/sirenAlarm";
 import { askConfirm } from "@/services/confirmService";
 
 /**
@@ -626,6 +627,7 @@ export function useAppActions(state) {
       ]);
       const items = Array.isArray(n.data?.items) ? n.data.items : [];
       setNotifications(items);
+      sirenOnNewAlarms(items);   // sirine kepala gudang — alarm gate MERAH baru
       setNotifMeta?.({ page: n.data?.page || 1, total: n.data?.total || items.length,
                        has_more: Boolean(n.data?.has_more) });
       setUnreadCount(u.data?.count || 0);

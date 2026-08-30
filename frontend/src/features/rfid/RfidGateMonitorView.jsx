@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Cpu, RefreshCw, ScanLine, ShieldCheck, ShieldAlert, ArrowLeftRight, Radio } from "lucide-react";
+import { Cpu, RefreshCw, ScanLine, ShieldCheck, ShieldAlert, ArrowLeftRight, Radio, Volume2, VolumeX } from "lucide-react";
 import KNSelect from "../../components/KNSelect";
 import ErrorNotice from "../../components/ErrorNotice";
 import axios, { API } from "../../services/apiClient";
+import { playSiren, isSirenMuted, setSirenMuted } from "../../utils/sirenAlarm";
 import { Stat, EmptyBox, Pill, SectionCard, RfidHeader, TabBtn, fmtTime, resultColor, useWarehouses } from "./rfidShared";
 import RfidSecurityPanel from "./RfidSecurityPanel";
 
@@ -21,6 +22,24 @@ export default function RfidGateMonitorView({ currentUser, selectedEntity }) {
   const [tab, setTab] = useState("monitor");
   const [live, setLive] = useState(false);
   const liveT = useRef(null);
+  // Sirine gate MERAH — baseline per gudang supaya ganti gudang tidak ikut meraung.
+  const [sirenMuted, setSirenMutedState] = useState(isSirenMuted());
+  const seenRed = useRef(null);
+  useEffect(() => { seenRed.current = null; }, [whId]);
+  useEffect(() => {
+    if (loading) return; // tunggu muatan pertama — baca MERAH historis bukan alarm baru
+    const redIds = reads.filter((r) => r.result === "red").map((r) => r.id);
+    if (seenRed.current === null) { seenRed.current = new Set(redIds); return; }
+    const fresh = redIds.filter((id) => !seenRed.current.has(id));
+    fresh.forEach((id) => seenRed.current.add(id));
+    if (fresh.length) playSiren();
+  }, [reads, loading]);
+  const toggleSiren = () => {
+    const next = !sirenMuted;
+    setSirenMuted(next);
+    setSirenMutedState(next);
+    if (!next) playSiren(1); // umpan balik singkat saat menyalakan
+  };
 
   const loadReads = async () => {
     try {
@@ -77,6 +96,12 @@ export default function RfidGateMonitorView({ currentUser, selectedEntity }) {
       <RfidHeader icon={Cpu} title="Gate Monitor" subtitle="Simulasikan pembacaan tag di gate. Sistem memvalidasi HIJAU (sah) / MERAH (tak sah).">
         <KNSelect data-testid="rfid-gate-wh" value={whId} onValueChange={setWhId} options={whOpts}
           className="field !py-1 !px-2 text-[12px] w-auto" placeholder="Gudang" />
+        <button data-testid="rfid-siren-toggle" onClick={toggleSiren}
+          title={sirenMuted ? "Sirine dimatikan — klik untuk menyalakan" : "Sirine menyala saat gate MERAH — klik untuk mematikan"}
+          className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-semibold ${
+            sirenMuted ? "border border-[#EFF0F2] bg-white text-[#6B6B73] hover:bg-[#F5F5F7]" : "bg-[#1B7F4B] text-white"}`}>
+          {sirenMuted ? <VolumeX size={14} /> : <Volume2 size={14} />} Sirine {sirenMuted ? "OFF" : "ON"}
+        </button>
         <button data-testid="rfid-gate-live" onClick={() => setLive((v) => !v)}
           className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-semibold ${
             live ? "bg-[#C0341D] text-white" : "border border-[#EFF0F2] bg-white hover:bg-[#F5F5F7]"}`}>

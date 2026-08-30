@@ -1,7 +1,8 @@
-import { Bell, Check, CheckCheck, RefreshCw, AlertTriangle, Info, X, CheckCircle2, Loader2, ArrowUpCircle, Filter, UserCheck } from "lucide-react";
+import { Bell, Check, CheckCheck, RefreshCw, AlertTriangle, Info, X, CheckCircle2, Loader2, ArrowUpCircle, Filter, UserCheck, Volume2, VolumeX } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
 import KNSelect from "./KNSelect";
 import { roleLabel } from "../config/roles";
+import { isSirenMuted, setSirenMuted, playSiren } from "../utils/sirenAlarm";
 
 const SEVERITY_ICON = { warning: AlertTriangle, critical: AlertTriangle, info: Info };
 const ROLE_RANK = { sales: 1, warehouse: 1, manager: 2, admin: 3 };
@@ -35,6 +36,8 @@ const TYPE_LABEL = {
   inspection_assigned: "SPK inspeksi untuk Anda",
   po_stage_stuck: "Tahap PO macet",
   internal_request_decided: "Permintaan internal diputuskan",
+  // 2026-08-30 — alarm gate MERAH bersirine (sirenAlarm.js)
+  rfid_gate_alarm: "Alarm gate MERAH",
 };
 const typeLabel = (t) => TYPE_LABEL[t] || (t || "lainnya").replace(/_/g, " ");
 
@@ -71,7 +74,15 @@ export default function NotificationCenter({
   const [sev, setSev] = useState("");
   const [type, setType] = useState("");
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [sirenMuted, setSirenMutedState] = useState(isSirenMuted());
   const ref = useRef(null);
+
+  const toggleSiren = () => {
+    const next = !sirenMuted;
+    setSirenMuted(next);
+    setSirenMutedState(next);
+    if (!next) playSiren(1);
+  };
 
   useEffect(() => {
     const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
@@ -124,6 +135,11 @@ export default function NotificationCenter({
           <div className="notif-panel-head">
             <span className="notif-panel-title">Notifikasi</span>
             <div className="flex items-center gap-1">
+              <button data-testid="notif-siren-toggle" className="notif-mini-button"
+                title={sirenMuted ? "Sirine alarm gate MERAH dimatikan" : "Sirine menyala saat alarm gate MERAH masuk"}
+                onClick={toggleSiren}>
+                {sirenMuted ? <VolumeX size={12} /> : <Volume2 size={12} />} Sirine
+              </button>
               {canGenerate && (
                 <button data-testid="notif-generate-button" className="notif-mini-button" title="Pindai event sistem" onClick={() => onGenerate?.()}>
                   <RefreshCw size={12} /> Scan
