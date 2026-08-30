@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Cpu, RefreshCw, ScanLine, ShieldCheck, ShieldAlert, ArrowLeftRight, Radio, Volume2, VolumeX } from "lucide-react";
+import { Cpu, RefreshCw, ScanLine, ShieldCheck, ShieldAlert, ArrowLeftRight, Radio, Volume2, VolumeX, Maximize2, X } from "lucide-react";
 import KNSelect from "../../components/KNSelect";
 import ErrorNotice from "../../components/ErrorNotice";
 import axios, { API } from "../../services/apiClient";
@@ -40,6 +40,30 @@ export default function RfidGateMonitorView({ currentUser, selectedEntity }) {
     setSirenMutedState(next);
     if (!next) playSiren(1); // umpan balik singkat saat menyalakan
   };
+
+  // Kiosk layar penuh — dipasang di layar dekat gate; MERAH berkedip + sirine.
+  const [kiosk, setKiosk] = useState(false);
+  const openKiosk = () => {
+    setKiosk(true);
+    setLive(true); // kiosk tanpa polling = layar mati rasa
+    try { document.documentElement.requestFullscreen?.(); } catch { /* opsional */ }
+  };
+  const closeKiosk = () => {
+    setKiosk(false);
+    try { if (document.fullscreenElement) document.exitFullscreen?.(); } catch { /* opsional */ }
+  };
+  useEffect(() => {
+    if (!kiosk) return;
+    const onKey = (e) => { if (e.key === "Escape") closeKiosk(); };
+    // Esc pada mode fullscreen ditelan browser → sinkron lewat fullscreenchange.
+    const onFs = () => { if (!document.fullscreenElement) setKiosk(false); };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("fullscreenchange", onFs);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("fullscreenchange", onFs);
+    };
+  }, [kiosk]); // eslint-disable-line
 
   const loadReads = async () => {
     try {
@@ -93,6 +117,39 @@ export default function RfidGateMonitorView({ currentUser, selectedEntity }) {
 
   return (
     <div data-testid="rfid-gate-view" className="space-y-4">
+      {kiosk && (() => {
+        const gateReads = gateId ? reads.filter((r) => r.device_id === gateId) : reads;
+        const last = gateReads[0];
+        const red = last?.result === "red";
+        const bg = !last ? "#101418" : red ? "#C0341D" : last.result === "green" ? "#1B7F4B" : "#0058CC";
+        return (
+          <div data-testid="rfid-gate-kiosk-full"
+            className={`fixed inset-0 z-[100] flex flex-col items-center justify-center text-white transition-colors ${red ? "kn-kiosk-blink" : ""}`}
+            style={{ background: bg }}>
+            <button data-testid="rfid-kiosk-close" onClick={closeKiosk} aria-label="Keluar kiosk"
+              className="absolute right-5 top-5 rounded-full bg-black/25 p-2.5 hover:bg-black/40">
+              <X size={22} />
+            </button>
+            <p className="absolute left-6 top-6 flex items-center gap-2 text-[14px] font-semibold opacity-80">
+              <Radio size={16} className="animate-pulse" /> LIVE · {gate ? gate.code : "Semua gate"} · update 4 dtk
+            </p>
+            {!last ? (
+              <p className="text-3xl font-bold opacity-80">Menunggu pembacaan gate…</p>
+            ) : (
+              <>
+                <p data-testid="rfid-kiosk-full-verdict" className="text-7xl sm:text-8xl font-black tracking-wide">
+                  {red ? "✕ MERAH — TAHAN" : last.result === "green" ? "✓ HIJAU — LOLOS" : "INFO"}
+                </p>
+                <p className="mt-6 text-3xl font-bold">{last.roll_no || last.epc}</p>
+                <p className="mt-1 text-2xl opacity-90">{last.product_name || "EPC tak dikenal"}</p>
+                <p className="mt-4 max-w-3xl text-center text-xl opacity-90">{last.reason}</p>
+                <p className="mt-3 text-[15px] opacity-70">{last.device_name} · {fmtTime(last.timestamp)}</p>
+              </>
+            )}
+            <p className="absolute bottom-5 text-[13px] opacity-60">Tekan Esc atau ✕ untuk keluar · sirine {sirenMuted ? "OFF" : "ON"}</p>
+          </div>
+        );
+      })()}
       <RfidHeader icon={Cpu} title="Gate Monitor" subtitle="Simulasikan pembacaan tag di gate. Sistem memvalidasi HIJAU (sah) / MERAH (tak sah).">
         <KNSelect data-testid="rfid-gate-wh" value={whId} onValueChange={setWhId} options={whOpts}
           className="field !py-1 !px-2 text-[12px] w-auto" placeholder="Gudang" />
@@ -106,6 +163,11 @@ export default function RfidGateMonitorView({ currentUser, selectedEntity }) {
           className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-semibold ${
             live ? "bg-[#C0341D] text-white" : "border border-[#EFF0F2] bg-white hover:bg-[#F5F5F7]"}`}>
           <Radio size={14} className={live ? "animate-pulse" : ""} /> {live ? "LIVE ●" : "Mode Live"}
+        </button>
+        <button data-testid="rfid-gate-kiosk-btn" onClick={openKiosk}
+          title="Layar penuh untuk dipasang dekat gate — MERAH berkedip bersama sirine"
+          className="flex items-center gap-1 rounded-lg border border-[#EFF0F2] bg-white px-3 py-1.5 text-[12px] font-semibold hover:bg-[#F5F5F7]">
+          <Maximize2 size={14} /> Kiosk
         </button>
         <button data-testid="rfid-gate-refresh" onClick={load}
           className="flex items-center gap-1 rounded-lg border border-[#EFF0F2] bg-white px-3 py-1.5 text-[12px] font-semibold hover:bg-[#F5F5F7]">

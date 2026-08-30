@@ -198,12 +198,21 @@ async def _create_inbound_tasks_for_po(po: Dict[str, Any]) -> None:
 
 @router.get("/purchase-orders")
 async def list_purchase_orders(request: Request, entity_id: str = None,
-                               line: str = "") -> Any:
+                               line: str = "", late: str = "") -> Any:
     """List all purchase orders. Opt-in paginasi (?page/?page_size)."""
     actor = await require_permission(request, "purchase_order", "view")
     ctx = await entity_ctx(request)
     query = {"po_type": {"$ne": "blanket"}}  # blanket punya daftar terpisah (GET /purchase-orders/blanket)
     query = resolve_list_scope("purchase_orders", query, ctx, entity_id)
+    if late:
+        # PO terlambat = masih menunggu barang & lewat tanggal janji supplier.
+        # Perbandingan string aman untuk format campur (date-only & ISO datetime).
+        from datetime import datetime, timezone
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        query = merge_query(query, {
+            "status": {"$in": ["pending", "receiving", "partial"]},
+            "expected_delivery_date": {"$gt": "", "$lt": today},
+        })
     # FASE L — pagar lini + chip `?line=` (pemilik: "berlaku di semua tempat, bukan
     # hanya saat membuat PO").
     query = line_scope.narrow(query, actor, line, field=line_scope.LINES_FIELD)

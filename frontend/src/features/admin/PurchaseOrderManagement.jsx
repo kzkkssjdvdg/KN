@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Package, ChevronDown, Boxes, ShoppingBag, GitBranch, Search } from "lucide-react";
+import { Plus, Package, ChevronDown, Boxes, ShoppingBag, GitBranch, Search, Clock } from "lucide-react";
 import axios, { API } from "../../services/apiClient";
 import { parseDecimal } from "../../utils/decimalInput";
 import { formatCurrency } from "../../utils/formatters";
@@ -70,7 +70,11 @@ export default function PurchaseOrderManagement({ user, selectedEntity, onApprov
   // P2 — paginasi server-side + pencarian (po_number / supplier).
   // FASE L — chip lini disaring di SERVER (daftar berhalaman).
   const [lineFilter, setLineFilter] = useState("");
-  const poParams = useMemo(() => (lineFilter ? { line: lineFilter } : {}), [lineFilter]);
+  const [lateOnly, setLateOnly] = useState(false);   // chip "Terlambat" — disaring SERVER
+  const poParams = useMemo(() => ({
+    ...(lineFilter ? { line: lineFilter } : {}),
+    ...(lateOnly ? { late: 1 } : {}),
+  }), [lineFilter, lateOnly]);
   const paged = usePagedList("/purchase-orders", { pageSize: 20, search, params: poParams });
   const pos = paged.items;
   const loading = paged.loading;
@@ -281,6 +285,12 @@ export default function PurchaseOrderManagement({ user, selectedEntity, onApprov
             <h2 data-testid="panel-title">Purchase Orders</h2>
           </div>
           <div className="flex items-center gap-2">
+            <button data-testid="po-filter-late" onClick={() => setLateOnly((v) => !v)}
+              title="Hanya PO yang lewat tanggal kirim dijanjikan supplier & masih menunggu barang"
+              className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-semibold transition-colors ${
+                lateOnly ? "bg-[#C0341D] text-white" : "border border-red-200 bg-red-50 text-red-600 hover:bg-red-100"}`}>
+              <Clock size={13} /> Terlambat
+            </button>
             <LineFilter value={lineFilter} onChange={setLineFilter} storageKey="purchase-orders"
                         allowed={user?.allowed_line_codes} className="!py-1.5"
                         testId="po-line-filter" />
@@ -360,7 +370,7 @@ export default function PurchaseOrderManagement({ user, selectedEntity, onApprov
             ) : pos.length === 0 ? (
               <div className="py-10 text-center text-[12px] text-[#6B6B73]">
                 <Package className="mx-auto mb-2 text-gray-300" size={28} />
-                <p>Belum ada Pesanan Pembelian</p>
+                <p>{lateOnly ? "Tidak ada PO terlambat — semua kiriman masih dalam janji supplier. 🎉" : "Belum ada Pesanan Pembelian"}</p>
               </div>
             ) : (
               <div className="divide-y divide-[#EFF0F2]">

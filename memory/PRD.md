@@ -1080,3 +1080,22 @@ Instrumentasi `OscillatorNode.start` di browser: buka layar = 0 bunyi; simulasi
 roll AVAILABLE keluar gate → MERAH — DITAHAN + 1 bunyi; toggle ON memberi umpan
 balik 1 siklus. eslint 0 error, build FE OK. Residu simulasi dipulihkan via
 seed_realistic.py + seed_e9_chain_demo.py.
+
+## 2026-08-30 — Filter PO Terlambat + Kiosk Gate Layar Penuh
+1. **Filter Terlambat (server-side)**: GET /api/purchase-orders menerima
+   `?late=1` — status pending/receiving/partial & expected_delivery_date[:10]
+   < hari ini (string compare, aman format campur). Chip merah `po-filter-late`
+   di daftar PO (samping LineFilter); empty-state ramah saat nol PO terlambat.
+   Filter di SERVER karena daftar berhalaman (client-side menyesatkan antar hal).
+2. **Kiosk layar penuh** (`RfidGateMonitorView`): tombol `rfid-gate-kiosk-btn` →
+   overlay fixed z-100 `rfid-gate-kiosk-full` + requestFullscreen (best-effort);
+   membuka kiosk otomatis menyalakan Mode Live (poll 4 dtk); pembacaan MERAH →
+   layar berkedip (keyframes `knKioskBlink` 0.8s di styles/fase0.css) bersama
+   sirine yang sudah ada; HIJAU=hijau penuh, tanpa baca=gelap "Menunggu".
+   Keluar: tombol `rfid-kiosk-close`, Esc, atau keluar fullscreen (sinkron via
+   fullscreenchange).
+### Verifikasi
+Browser end-to-end: chip Terlambat 12→1 PO (PO-00004) → toggle off kembali 12;
+kiosk terbuka LIVE, simulasi roll AVAILABLE keluar → verdict "MERAH — TAHAN"
++ animasi knKioskBlink terukur via getComputedStyle; tutup via X & Esc OK.
+curl late=1 → total 1 (PO-00004). Residu simulasi dipulihkan via seed.
