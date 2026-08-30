@@ -22,7 +22,7 @@ import { pickPrice, sourceMeta } from "../hooks/useEffectivePrices";
  * ditulis di layar beserta jalan keluarnya (bukan sekadar tombol mati).
  */
 export default function ProductQuickView({ open, group, specialMap = {}, onAdd, onClose,
-  entityId = "", rndEnforcement = "block" }) {
+  entityId = "", rndEnforcement = "block", allowRollPick = true }) {
   const variants = useMemo(() => group?.variants || [], [group]);
   const [selectedId, setSelectedId] = useState(null);
   const [qty, setQty] = useState(1);
@@ -166,7 +166,10 @@ export default function ProductQuickView({ open, group, specialMap = {}, onAdd, 
             </div>
           )}
 
-          {/* SALES REVAMP V2 — Pilih cara beli: per yard ATAU per roll */}
+          {/* SALES REVAMP V2 — Pilih cara beli: per yard ATAU per roll.
+              KONFIG allocation.roll_pick_sales OFF → sales tidak melihat pilihan roll;
+              roll dipilih otomatis (FEFO) dan bisa DIGANTI Admin Sales di detail pesanan. */}
+          {allowRollPick && (
           <div data-testid="quickview-mode-toggle" className="grid grid-cols-2 gap-2">
             <button type="button" data-testid="quickview-mode-qty" onClick={() => setMode("qty")}
               className={`flex items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-[12px] font-semibold transition ${mode === "qty" ? "border-[#0058CC] bg-[#EAF2FF] text-[#0058CC]" : "border-[#E5E5EA] bg-white text-[#3C3C43] hover:border-[#9A9BA3]"}`}>
@@ -177,6 +180,7 @@ export default function ProductQuickView({ open, group, specialMap = {}, onAdd, 
               <Scissors size={13} /> Beli per Roll
             </button>
           </div>
+          )}
 
           {mode === "qty" ? (
             /* Qty + Satuan (FIXED ke base_unit — F2 UoM SSOT) */
@@ -218,7 +222,7 @@ export default function ProductQuickView({ open, group, specialMap = {}, onAdd, 
             </div>
             <div className="flex gap-2">
               <button data-testid="quickview-add-button" className="primary-button flex-1 justify-center py-2.5" disabled={avail <= 0 || blocked} onClick={() => {
-                if (rollCount > 0) { setShowReconcile(true); }
+                if (rollCount > 0 && allowRollPick) { setShowReconcile(true); }
                 else { onAdd(selected, qty, baseUnit); onClose(); }
               }}>
                 <ShoppingBag size={15} /> {blocked ? "Belum boleh dijual" : avail <= 0 ? "Stok Habis" : "Tambah ke Keranjang"}

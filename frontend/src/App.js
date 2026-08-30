@@ -294,6 +294,7 @@ function App() {
         user={user}
         token={token}
         onLogout={logout}
+        allowRollPick={settings?.allocation?.roll_pick_sales !== false}
         data={data}
         loading={loading}
         cart={cart}

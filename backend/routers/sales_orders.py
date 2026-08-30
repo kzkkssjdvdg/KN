@@ -263,6 +263,15 @@ async def create_order(payload: SalesOrderCreate, request: Request) -> Dict[str,
     for it_in in payload.items:
         if getattr(it_in, "purchase_mode", "qty") == "roll" and getattr(it_in, "roll_lines", None):
             roll_mode_map[it_in.product_id] = [rl.model_dump() for rl in it_in.roll_lines]
+    # KONFIG `allocation.roll_pick_sales` — bila dimatikan, role SALES tidak boleh memilih
+    # roll saat checkout (mode qty tetap jalan, FEFO otomatis); pemilihan roll menjadi hak
+    # Admin Sales lewat "Ganti Roll" di detail pesanan. Pagar SERVER, bukan hanya UI.
+    if roll_mode_map and actor.get("role") == "sales" and not alloc_policy.get("roll_pick_sales", True):
+        raise HTTPException(
+            status_code=400,
+            detail="Pemilihan roll saat checkout sedang dinonaktifkan untuk sales. "
+                   "Pesan per jumlah (yard) — roll dipilih otomatis (FEFO), dan Admin Sales "
+                   "dapat menggantinya bila perlu.")
     # Mixed-Lot Confirmation gate: bila kebijakan prefer_single tapi hasil lintas-lot,
     # tolak (409 terstruktur) kecuali user sudah konfirmasi (confirm_mixed_lot=true).
     # Item mode 'roll' DILEWATI (user sudah pilih roll/lot eksplisit).

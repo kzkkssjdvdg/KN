@@ -15,7 +15,7 @@ import { onImageError, productImage } from "../../../utils/productImage";
  * SALES REVAMP V2: mode "Per yard" / "Beli per Roll"; inventory = total global saja.
  * FASE F: varian yang belum dirilis ke produksi tidak bisa ditambahkan. */
 export default function MobileQuickView({ group, specialMap = {}, onAdd, onClose, entityId = "",
-  rndEnforcement = "block" }) {
+  rndEnforcement = "block", allowRollPick = true }) {
   const variants = useMemo(() => group?.variants || [], [group]);
   const [selectedId, setSelectedId] = useState(null);
   const [qty, setQty] = useState(1);
@@ -99,13 +99,15 @@ export default function MobileQuickView({ group, specialMap = {}, onAdd, onClose
             </div>
           )}
 
-          {/* SALES REVAMP V2 — mode beli */}
+          {/* SALES REVAMP V2 — mode beli (disembunyikan bila roll_pick_sales OFF) */}
+          {allowRollPick && (
           <div data-testid="mobile-quickview-mode" className="mt-3 grid grid-cols-2 gap-2">
             <button type="button" data-testid="mobile-quickview-mode-qty" onClick={() => setMode("qty")}
               className={`rounded-lg border px-3 py-2 text-[12px] font-semibold ${mode === "qty" ? "border-[#0058CC] bg-[#EAF2FF] text-[#0058CC]" : "border-[#E5E5EA] bg-white text-[#3C3C43]"}`}>Per {baseUnit}</button>
             <button type="button" data-testid="mobile-quickview-mode-roll" onClick={() => setMode("roll")} disabled={rollCount <= 0 || blocked}
               className={`flex items-center justify-center gap-1 rounded-lg border px-3 py-2 text-[12px] font-semibold disabled:opacity-40 ${mode === "roll" ? "border-[#0058CC] bg-[#EAF2FF] text-[#0058CC]" : "border-[#E5E5EA] bg-white text-[#3C3C43]"}`}><Scissors size={13} /> Per Roll</button>
           </div>
+          )}
 
           {mode === "qty" ? (
             <>
@@ -126,7 +128,7 @@ export default function MobileQuickView({ group, specialMap = {}, onAdd, onClose
               <button data-testid="mobile-quickview-add" disabled={avail <= 0 || blocked}
                 className="primary-button mt-4 w-full justify-center py-3 text-[14px]"
                 onClick={() => {
-                  if (rollCount > 0) { setShowReconcile(true); }
+                  if (rollCount > 0 && allowRollPick) { setShowReconcile(true); }
                   else { onAdd(selected, qty, unit); onClose(); }
                 }}>
                 <ShoppingBag size={16} /> {blocked ? "Belum boleh dijual"

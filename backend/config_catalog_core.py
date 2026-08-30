@@ -515,6 +515,18 @@ E("allocation.mode", group="stok-satuan", type="enum", default="auto",
   consumers=("services/config_service.py:get_allocation_policy", "services/roll_service.py"),
   risk="medium")
 
+E("allocation.roll_pick_sales", group="stok-satuan", type="bool", default=True,
+  scopes=("global", "entity"),
+  label="Sales boleh pilih roll saat checkout",
+  help="Bila dimatikan, role SALES hanya memasukkan jumlah (yard + perkiraan roll) — "
+       "roll dipilihkan otomatis (FEFO), lalu Admin Sales dapat MENGGANTI roll pilihan "
+       "sistem lewat tombol 'Ganti Roll' di detail pesanan. Admin Sales/manajer/admin "
+       "tetap boleh memilih roll saat checkout.",
+  impact="Menggeser keputusan pemilihan roll dari sales lapangan ke Admin Sales (alokasi manual).",
+  example="OFF → sales pesan 200 yard; sistem reserve FEFO; Admin Sales tukar ke roll lot A-113",
+  consumers=("routers/sales_orders.py", "routers/sales_orders_extra.py:reallocate_line_rolls"),
+  risk="medium")
+
 E("allocation.priority_order", group="stok-satuan", type="list",
   default=["owner", "lot", "location", "roll_efficiency"], scopes=("global", "entity"),
   label="Urutan prioritas pemilihan stok",

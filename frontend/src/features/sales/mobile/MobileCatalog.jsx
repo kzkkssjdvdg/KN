@@ -8,7 +8,7 @@ import { formatCurrency } from "../../../utils/formatters";
 import { useEffectivePrices, pickPrice } from "../../../hooks/useEffectivePrices";
 
 export default function MobileCatalog({ data, loading, onAdd, onInspect, entityId, cart, onOpenCart,
-  selectedCustomer = null }) {
+  selectedCustomer = null, allowRollPick = true }) {
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("all");
   const [activeGroup, setActiveGroup] = useState(null);
@@ -101,6 +101,7 @@ export default function MobileCatalog({ data, loading, onAdd, onInspect, entityI
       {activeGroup && (
         <MobileQuickView specialMap={priceMap} group={activeGroup} entityId={entityId} onAdd={onAdd}
           rndEnforcement={data?.rnd_policy?.lifecycle_enforcement || "block"}
+          allowRollPick={allowRollPick}
           onClose={() => setActiveGroup(null)} />
       )}
     </div>

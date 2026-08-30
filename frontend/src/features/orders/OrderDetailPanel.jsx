@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { XCircle, Clock3, Truck, CreditCard, PackageX, ShieldAlert, Send, FileText, AlertTriangle, PackageCheck, ClipboardCheck, PackageSearch } from "lucide-react";
+import { XCircle, Clock3, Truck, CreditCard, PackageX, ShieldAlert, Send, FileText, AlertTriangle, PackageCheck, ClipboardCheck, PackageSearch, Repeat } from "lucide-react";
 import { can } from "../../config/roles";
 import { formatCurrency, formatQty } from "../../utils/formatters";
 import { StagePill, StageTimeline } from "../../components/SoStatusBadges";
@@ -18,6 +18,8 @@ import OrderIntercoSupplyPanel from "./OrderIntercoSupplyPanel";
 import RestockPanel from "./RestockPanel";
 // FASE G-1 — jejak koreksi dokumen (amandemen bernomor + nota kredit/debit).
 import AmendmentTrailPanel from "../finance/amendments/AmendmentTrailPanel";
+// Alokasi manual Admin Sales — Ganti Roll pilihan sistem (izin inventory.pegging).
+import ReallocateRollsModal from "./ReallocateRollsModal";
 // F1b — arti `price_source` yang di-snapshot pada baris SO (dari resolver harga).
 const PRICE_SOURCE_BADGE = {
   special_approval: { label: "Harga khusus", fg: "#6B219A", bg: "#F3E9FA" },
@@ -45,6 +47,7 @@ export function OrderDetailPanel({
   const [shipments, setShipments] = useState([]);
   const [taxInvoices, setTaxInvoices] = useState([]);
   const [issuingTax, setIssuingTax] = useState(false);
+  const [reallocItem, setReallocItem] = useState(null);   // Ganti Roll (alokasi manual)
   const FULFILL_STATUSES = ["partially_picked", "picked", "partially_shipped", "shipped", "done"];
   const TAX_ELIGIBLE = ["confirmed", "partially_picked", "picked", "partially_shipped", "shipped", "done"];
   const taxEligible = sel?.is_pkp !== false && Number(sel?.ppn_amount) > 0 && TAX_ELIGIBLE.includes(sel?.status);
@@ -68,6 +71,10 @@ export function OrderDetailPanel({
   // "Perjalanan Pesanan" (E8.14) yang memang dirancang untuk sales.
   const canSeeShipments = can(perms, "wms", "view");
   const canTakeMoney = can(perms, "ar_receipt", "create");   // Finance
+  // Ganti Roll = KEPUTUSAN PEMENUHAN (izin inventory.pegging — Admin Sales/manajer/admin,
+  // BUKAN sales lapangan), hanya sebelum pesanan dikonfirmasi/dipicking.
+  const canReallocate = can(perms, "inventory", "pegging") &&
+    ["draft", "reserved", "waiting_approval", "approved", "waiting_stock"].includes(sel?.status);
 
   useEffect(() => {
     let active = true;
@@ -284,6 +291,13 @@ export function OrderDetailPanel({
                   {formatCurrency(item.line_total != null ? item.line_total : item.subtotal)}
                 </span>
               </div>
+              {canReallocate && (
+                <button data-testid={`order-item-realloc-${item.product_id}`}
+                  onClick={() => setReallocItem(item)}
+                  className="mt-1 flex items-center gap-1 rounded border border-[#CBDFFF] bg-[#F2F7FF] px-1.5 py-0.5 text-[10px] font-semibold text-[#0058CC] hover:bg-[#E3EEFF]">
+                  <Repeat size={10} /> Ganti Roll
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -533,6 +547,11 @@ export function OrderDetailPanel({
           )}
         </div>
       </div>
+      {reallocItem && (
+        <ReallocateRollsModal order={sel} item={reallocItem}
+          onClose={() => setReallocItem(null)}
+          onDone={() => { setReallocItem(null); onRefresh?.(); }} />
+      )}
     </aside>
   );
 }

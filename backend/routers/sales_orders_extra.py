@@ -11,8 +11,8 @@ from fastapi import APIRouter, HTTPException, Request
 from pymongo import ReturnDocument
 from db import db
 from dependencies import require_permission, audit
-from core_utils import now_iso, safe_doc, DEFAULT_ENTITY_ID, strip_cost_fields, rupiah
-from schemas import AllocationPreviewIn, RollReconcilePreviewIn, RepeatRestockIn
+from core_utils import now_iso, new_id, safe_doc, DEFAULT_ENTITY_ID, strip_cost_fields, rupiah
+from schemas import AllocationPreviewIn, RollReconcilePreviewIn, RepeatRestockIn, SoReallocateIn
 from services import restock_service        # PS-21 — repeat/restock SO → PR
 from services import sales_ownership        # FASE E-8 (E8.4/US11) — "Pesanan Saya"
 from services import line_scope             # FASE L — pagar & penyaring lini produk
@@ -22,6 +22,8 @@ from services.inventory_service import expire_old_reservations
 from services.roll_service import (
     release_order_rolls, set_order_rolls_status,
     preview_line_allocation, deliver_order_rolls, compute_roll_reconcile,
+    reserve_specific_rolls, allocations_from_reserved_rolls,
+    record_reservation_movements, rebuild_balance,
 )
 from services.config_service import (
     evaluate_approval, role_satisfies, get_allocation_policy, get_effective_settings,
@@ -488,6 +490,111 @@ async def mark_delivered(order_id: str, request: Request) -> Dict[str, Any]:
                                {"delivered_at": now_iso()})
     await audit(actor["name"], "order_delivered", "sales_order", order_id, {"rolls_delivered": delivered})
     return strip_cost_fields(result, actor.get("role"))
+
+
+@router.post("/sales-orders/{order_id}/items/{product_id}/reallocate")
+async def reallocate_line_rolls(order_id: str, product_id: str, payload: SoReallocateIn,
+                                request: Request) -> Dict[str, Any]:
+    """ALOKASI MANUAL — Admin Sales MENGGANTI roll pilihan sistem untuk 1 baris pesanan.
+    Izin `inventory.pegging` (keputusan pemenuhan — sales lapangan tidak punya).
+    Hanya sebelum pesanan dikonfirmasi/dipicking. Roll pengganti wajib milik entitas
+    pesanan; kebutuhan lintas-PT tetap lewat Keputusan Pemenuhan (dokumen antar-PT)."""
+    actor = await require_permission(request, "inventory", "pegging")
+    order = safe_doc(await db.sales_orders.find_one({"id": order_id}, {"_id": 0}))
+    if not order:
+        raise HTTPException(status_code=404, detail="Order tidak ditemukan")
+    assert_entity_access(order, "sales_orders", await entity_ctx(request))
+    if order["status"] not in ["draft", "reserved", "waiting_approval", "approved", "waiting_stock"]:
+        raise HTTPException(status_code=409,
+                            detail="Roll hanya bisa diganti sebelum pesanan dikonfirmasi/dipicking.")
+    item = next((i for i in order.get("items", []) if i.get("product_id") == product_id), None)
+    if not item:
+        raise HTTPException(status_code=404, detail="Baris produk tidak ada di pesanan ini.")
+    if not payload.roll_lines:
+        raise HTTPException(status_code=400, detail="Pilih minimal satu roll.")
+
+    current = await db.inventory_rolls.find(
+        {"reserved_ref.id": order_id, "product_id": product_id, "status": "reserved"},
+        {"_id": 0}).to_list(1000)
+    cur_by_id = {r["id"]: r for r in current}
+    keep_ids, new_lines = set(), []
+    for ln in payload.roll_lines:
+        if ln.roll_id in cur_by_id:
+            keep_ids.add(ln.roll_id)   # roll lama dipertahankan apa adanya (panjang reserve tetap)
+            continue
+        roll = await db.inventory_rolls.find_one({"id": ln.roll_id}, {"_id": 0})
+        if not roll:
+            raise HTTPException(status_code=404, detail=f"Roll {ln.roll_id} tidak ditemukan.")
+        if roll.get("owner_entity_id") != order.get("entity_id"):
+            raise HTTPException(status_code=400,
+                                detail=f"Roll {roll.get('roll_no', ln.roll_id)} milik entitas lain — "
+                                       "ambil lewat Keputusan Pemenuhan (antar-PT), bukan Ganti Roll.")
+        new_lines.append({"roll_id": ln.roll_id, "take_qty": round(float(ln.take_qty or 0), 2)})
+
+    # Urutan aman: reserve roll BARU dulu (atomik, rollback internal saat gagal),
+    # baru lepas roll lama — gagal di tengah tidak meninggalkan baris tanpa reservasi.
+    ref = {"type": "sales_order", "id": order_id}
+    newly = await reserve_specific_rolls(new_lines, ref, product_id=product_id) if new_lines else []
+    dropped = [r for r in current if r["id"] not in keep_ids]
+    segments = set()
+    for r in dropped:
+        await db.inventory_rolls.update_one(
+            {"id": r["id"], "status": "reserved", "reserved_ref.id": order_id},
+            {"$set": {"status": "available", "reserved_ref": None, "updated_at": now_iso()}})
+        segments.add((r["warehouse_id"], r["owner_entity_id"]))
+    warehouses = {w["id"]: w for w in await db.warehouses.find({}, {"_id": 0}).to_list(100)}
+    final_rolls = [cur_by_id[i] for i in keep_ids] + newly
+    for r in final_rolls:
+        segments.add((r["warehouse_id"], r["owner_entity_id"]))
+    for wid, oid in segments:
+        await rebuild_balance(product_id, wid, oid)
+    if newly:
+        await record_reservation_movements(product_id, newly, order_id, warehouses)
+
+    reserved_qty = round(sum(float(r.get("length_remaining", 0) or 0) for r in final_rolls), 2)
+    base_qty = round(float(item.get("base_quantity") or item.get("quantity") or 0), 2)
+    backorder_qty = round(base_qty - reserved_qty, 2)
+    if backorder_qty < 0.01:
+        backorder_qty = 0.0
+    item["reserved_qty"] = reserved_qty
+    item["backorder_qty"] = backorder_qty
+    if item.get("qty_rolls") is not None:
+        item["qty_rolls"] = len(final_rolls)
+
+    allocations = [a for a in order.get("allocations", []) if a.get("product_id") != product_id]
+    new_allocs = allocations_from_reserved_rolls(product_id, final_rolls, warehouses, status="allocated")
+    for a in new_allocs:
+        a["allocation_explanation"] = (f"Dialokasikan MANUAL oleh {actor['name']} "
+                                       f"({len(final_rolls)} roll) — menggantikan pilihan sistem.")
+    allocations.extend(new_allocs)
+    backorders = [b for b in order.get("backorders", []) if b.get("product_id") != product_id]
+    if backorder_qty > 0.01:
+        backorders.append({
+            "id": new_id("bo"), "product_id": product_id, "sku": item.get("sku", ""),
+            "product_name": item.get("product_name", ""), "entity_id": order.get("entity_id"),
+            "customer_city": order.get("customer_city", ""),
+            "requested_qty": base_qty, "reserved_qty": reserved_qty,
+            "backorder_qty": backorder_qty, "status": "waiting_stock",
+            "created_at": now_iso(), "updated_at": now_iso(),
+        })
+    update = {
+        "items": order["items"], "allocations": allocations, "backorders": backorders,
+        "has_backorder": any(float(b.get("backorder_qty", 0) or 0) > 0.01 for b in backorders),
+        "is_split_warehouse": len({a["warehouse_id"] for a in allocations}) > 1,
+        "has_mixed_lot": any(a.get("lot_mode") == "mixed" for a in allocations),
+        "updated_at": now_iso(),
+    }
+    total_reserved = round(sum(float(i.get("reserved_qty", 0) or 0) for i in order["items"]), 2)
+    if order["status"] in ("reserved", "waiting_stock"):
+        update["status"] = "reserved" if total_reserved > 0.01 else "waiting_stock"
+    update.update(stage_fields({**order, **update}))
+    saved = await db.sales_orders.find_one_and_update(
+        {"id": order_id}, {"$set": update}, projection={"_id": 0}, return_document=ReturnDocument.AFTER)
+    await audit(actor["name"], "so_line_reallocated", "sales_order", order_id,
+                {"product_id": product_id, "kept": len(keep_ids), "new": len(newly),
+                 "released": len(dropped), "reserved_qty": reserved_qty,
+                 "backorder_qty": backorder_qty})
+    return strip_cost_fields(_norm_backorder(saved), actor.get("role"))
 
 
 @router.post("/sales-orders/{order_id}/release-reservation")

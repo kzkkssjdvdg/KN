@@ -224,6 +224,7 @@ export function SalesPortal({
         onClose={closeQuickView}
         entityId={selectedEntity && selectedEntity !== "all" ? selectedEntity : (selectedCustomer?.entity_id || "")}
         rndEnforcement={rndEnforcement}
+        allowRollPick={!(user?.role === "sales" && settings?.allocation?.roll_pick_sales === false)}
       />
 
       <CheckoutDrawer

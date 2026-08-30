@@ -91,6 +91,7 @@ DEFAULT_GLOBAL_SETTINGS: Dict[str, Any] = {
     # Sub-fase 1.7 — Allocation Policy (KN_15 §6.0) — CONFIGURABLE + CLARITY
     "allocation": {
         "mode": "auto",                                            # auto | assisted | manual
+        "roll_pick_sales": True,   # bila False: role SALES tidak boleh pilih roll saat checkout
         "priority_order": ["owner", "lot", "location", "roll_efficiency"],  # owner selalu HARD #1
         "lot_mode": "prefer_single",                               # prefer_single | strict_single | allow_mixed
         "lot_selection": "fefo",                                   # fefo | fifo | smallest_fit | largest_fit
@@ -476,7 +477,7 @@ def _sanitize_alloc(policy: Dict[str, Any], base: Dict[str, Any]) -> Dict[str, A
     for k, v in (policy or {}).items():
         if k in VALID_ALLOC:
             out[k] = v if v in VALID_ALLOC[k] else base.get(k)
-        elif k in ("allow_intercompany", "allow_partial", "dye_lot_strict"):
+        elif k in ("allow_intercompany", "allow_partial", "dye_lot_strict", "roll_pick_sales"):
             out[k] = bool(v)
         elif k == "priority_order" and isinstance(v, list) and v:
             # owner selalu #1 (HARD)

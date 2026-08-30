@@ -54,7 +54,7 @@ export default function MobileSalesApp(props) {
     onInspect, onAdd, selectedCustomer, setSelectedCustomer,
     selectedAddress, setSelectedAddress, onSubmitOrder, paymentTerms,
     selectedEntity, entities, notifications = [], unreadCount = 0,
-    onMarkAllRead, onForceDesktop,
+    onMarkAllRead, onForceDesktop, allowRollPick = true,
   } = props;
 
   const [tab, setTab] = useState("home");
@@ -88,6 +88,7 @@ export default function MobileSalesApp(props) {
         {tab === "catalog" && (
           <MobileCatalog data={data} loading={loading} onAdd={onAdd} onInspect={onInspect}
             entityId={selectedEntity} cart={cart} onOpenCart={() => setTab("cart")}
+            allowRollPick={allowRollPick}
             selectedCustomer={selectedCustomer} />
         )}
         {tab === "cart" && (

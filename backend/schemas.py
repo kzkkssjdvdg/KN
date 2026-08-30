@@ -364,6 +364,12 @@ class RollLineIn(BaseModel):
     take_qty: float = Field(0, ge=0)                  # 0 → diisi backend = length_remaining (roll utuh)
 
 
+class SoReallocateIn(BaseModel):
+    """Alokasi manual Admin Sales — GANTI roll pilihan sistem untuk 1 baris SO.
+    Roll yang sudah ter-reserve untuk baris ini boleh ikut dikirim (= dipertahankan)."""
+    roll_lines: List[RollLineIn]
+
+
 class ReconcileItemIn(BaseModel):
     product_id: str
     quantity: float = Field(0, ge=0)
